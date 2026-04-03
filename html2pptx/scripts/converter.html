@@ -1,0 +1,1059 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="PPTX Factory - 将 HTML 文件高保真转换为 PowerPoint 演示文稿">
+    <title>PPTX Factory - Next Gen v1.4.0</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" crossorigin="anonymous">
+    <script src="./dom-to-pptx.bundle.js"></script>
+    <style>
+        :root {
+            --primary: #6366f1;
+            --primary-light: #818cf8;
+            --primary-glow: rgba(99, 102, 241, 0.25);
+            --secondary: #10b981;
+            --secondary-light: #34d399;
+            --danger: #ef4444;
+            --danger-light: #f87171;
+            --warning: #f59e0b;
+            --bg-deepest: #0b0f1a;
+            --bg-deep: #111827;
+            --bg-card: rgba(255, 255, 255, 0.03);
+            --bg-card-hover: rgba(255, 255, 255, 0.06);
+            --border: rgba(255, 255, 255, 0.06);
+            --border-hover: rgba(255, 255, 255, 0.12);
+            --text-primary: #f9fafb;
+            --text-secondary: #9ca3af;
+            --text-muted: #6b7280;
+            --glass: rgba(255, 255, 255, 0.04);
+            --radius: 16px;
+            --radius-sm: 10px;
+            --radius-xs: 6px;
+            --shadow-lg: 0 20px 60px -15px rgba(0, 0, 0, 0.5);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: var(--bg-deepest);
+            color: var(--text-primary);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Ambient background glow */
+        body::before {
+            content: '';
+            position: fixed;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: 
+                radial-gradient(ellipse at 20% 50%, rgba(99, 102, 241, 0.08) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 20%, rgba(16, 185, 129, 0.05) 0%, transparent 50%),
+                radial-gradient(ellipse at 50% 80%, rgba(139, 92, 246, 0.06) 0%, transparent 50%);
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        .container {
+            max-width: 960px;
+            margin: 0 auto;
+            padding: 48px 24px;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* Header — scoped to .container to avoid polluting workspace */
+        .container > .header {
+            text-align: center;
+            margin-bottom: 48px;
+        }
+
+        .container .header-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 6px 14px;
+            border-radius: 100px;
+            background: var(--glass);
+            border: 1px solid var(--border);
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-secondary);
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            margin-bottom: 20px;
+            backdrop-filter: blur(8px);
+        }
+
+        .container .header-badge .dot {
+            width: 6px; height: 6px;
+            border-radius: 50%;
+            background: var(--secondary);
+            animation: pulse-dot 2s ease-in-out infinite;
+        }
+
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 1; transform: scale(1); }
+            50% { opacity: 0.5; transform: scale(0.8); }
+        }
+
+        .container h1 {
+            font-size: 40px;
+            font-weight: 800;
+            letter-spacing: -1px;
+            background: linear-gradient(135deg, #f9fafb 0%, var(--primary-light) 50%, var(--secondary-light) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 12px;
+            line-height: 1.1;
+        }
+
+        .container .header-sub {
+            font-size: 16px;
+            color: var(--text-muted);
+            font-weight: 400;
+        }
+
+        /* Cards */
+        .card {
+            background: var(--bg-card);
+            border-radius: var(--radius);
+            padding: 28px;
+            margin-bottom: 20px;
+            border: 1px solid var(--border);
+            backdrop-filter: blur(12px);
+            transition: border-color 0.3s ease, background 0.3s ease;
+        }
+
+        .card:hover {
+            border-color: var(--border-hover);
+            background: var(--bg-card-hover);
+        }
+
+        .card-title {
+            font-size: 15px;
+            font-weight: 700;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            color: var(--text-primary);
+        }
+
+        .card-title .icon {
+            width: 32px; height: 32px;
+            border-radius: var(--radius-xs);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+        }
+
+        .card-title .icon.purple { background: rgba(99, 102, 241, 0.15); }
+        .card-title .icon.green { background: rgba(16, 185, 129, 0.15); }
+
+        /* Dropzone */
+        .dropzone {
+            border: 2px dashed rgba(99, 102, 241, 0.3);
+            padding: 48px 24px;
+            text-align: center;
+            border-radius: var(--radius-sm);
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: transparent;
+            position: relative;
+        }
+
+        .dropzone:hover {
+            border-color: var(--primary);
+            background: rgba(99, 102, 241, 0.04);
+        }
+
+        .dropzone.drag-over {
+            border-color: var(--secondary);
+            background: rgba(16, 185, 129, 0.06);
+            border-style: solid;
+        }
+
+        .dropzone-icon {
+            font-size: 36px;
+            margin-bottom: 12px;
+            display: block;
+        }
+
+        .dropzone-text {
+            font-size: 14px;
+            color: var(--text-secondary);
+            font-weight: 500;
+        }
+
+        .dropzone-hint {
+            font-size: 12px;
+            color: var(--text-muted);
+            margin-top: 6px;
+        }
+
+        /* Textarea */
+        textarea {
+            width: 100%;
+            height: 160px;
+            background: rgba(0, 0, 0, 0.3);
+            color: var(--text-primary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 16px;
+            margin: 16px 0;
+            font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+            font-size: 13px;
+            resize: vertical;
+            transition: border-color 0.3s ease;
+            line-height: 1.6;
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px var(--primary-glow);
+        }
+
+        textarea::placeholder {
+            color: var(--text-muted);
+        }
+
+        /* Buttons */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            border: none;
+            padding: 12px 22px;
+            border-radius: var(--radius-xs);
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 13px;
+            font-family: inherit;
+            transition: all 0.2s ease;
+            color: #fff;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--primary) 0%, #8b5cf6 100%);
+            box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, var(--secondary) 0%, #059669 100%);
+            box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+        }
+
+        .btn-success:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
+        }
+
+        .btn-danger {
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--danger-light);
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+
+        .btn-danger:hover { background: rgba(239, 68, 68, 0.25); }
+
+        .btn-ghost {
+            background: rgba(255, 255, 255, 0.06);
+            color: var(--text-secondary);
+            padding: 6px 10px;
+            font-size: 12px;
+        }
+
+        .btn-ghost:hover { background: rgba(255, 255, 255, 0.1); color: var(--text-primary); }
+
+        .btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        /* Settings row */
+        .settings-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            align-items: flex-end;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .form-group label {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .form-group input[type="text"] {
+            background: rgba(0, 0, 0, 0.3);
+            color: var(--text-primary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-xs);
+            padding: 10px 14px;
+            font-size: 13px;
+            font-family: inherit;
+            transition: border-color 0.3s ease;
+            min-width: 220px;
+        }
+
+        .form-group input[type="text"]:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px var(--primary-glow);
+        }
+
+        /* Slide list */
+        .slide-list-header {
+            font-size: 12px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            margin-bottom: 10px;
+            padding: 0 4px;
+        }
+
+        .slide-item {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            padding: 14px 18px;
+            margin-bottom: 8px;
+            border-radius: var(--radius-sm);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            transition: all 0.2s ease;
+        }
+
+        .slide-item:hover {
+            border-color: var(--border-hover);
+            background: var(--bg-card-hover);
+        }
+
+        .slide-info {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            min-width: 0;
+        }
+
+        .slide-number {
+            width: 28px; height: 28px;
+            border-radius: 50%;
+            background: rgba(99, 102, 241, 0.12);
+            color: var(--primary-light);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            font-weight: 700;
+            flex-shrink: 0;
+        }
+
+        .slide-name {
+            font-size: 13px;
+            font-weight: 500;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .slide-actions {
+            display: flex;
+            gap: 4px;
+            flex-shrink: 0;
+        }
+
+        /* Status toast */
+        .status-toast {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            padding: 14px 22px;
+            border-radius: var(--radius-sm);
+            display: none;
+            font-size: 13px;
+            font-weight: 600;
+            z-index: 10000;
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: var(--shadow-lg);
+            max-width: 400px;
+            animation: slide-in 0.3s ease;
+        }
+
+        .status-toast.is-error {
+            cursor: pointer;
+        }
+
+        .status-toast .close-hint {
+            font-size: 11px;
+            opacity: 0.6;
+            margin-top: 4px;
+            display: none;
+        }
+
+        .status-toast.is-error .close-hint {
+            display: block;
+        }
+
+        @keyframes slide-in {
+            from { transform: translateY(20px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        /* Progress bar */
+        .progress-bar {
+            width: 100%;
+            height: 3px;
+            background: rgba(255, 255, 255, 0.06);
+            border-radius: 2px;
+            overflow: hidden;
+            margin-top: 16px;
+            display: none;
+        }
+
+        .progress-bar.active { display: block; }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary), var(--secondary));
+            border-radius: 2px;
+            transition: width 0.5s ease;
+            width: 0%;
+        }
+
+        /* Hidden workspace — CSS isolated */
+        #pptx-export-workspace {
+            position: fixed;
+            top: 0;
+            left: -5000px;
+            width: 1920px;
+            background: #fff;
+            z-index: -9999;
+            pointer-events: none;
+        }
+
+
+
+        /* Empty state */
+        .empty-state {
+            text-align: center;
+            padding: 32px;
+            color: var(--text-muted);
+            font-size: 13px;
+        }
+
+        .empty-state .empty-icon {
+            font-size: 32px;
+            margin-bottom: 8px;
+            opacity: 0.5;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <div class="header-badge">
+                <span class="dot"></span>
+                PPTX Factory v1.4.0
+            </div>
+            <h1>HTML → PPTX 高保真转换</h1>
+            <p class="header-sub">上传 HTML 文件，精准还原为可编辑的 PowerPoint 幻灯片</p>
+        </div>
+
+        <!-- Step 1: Upload -->
+        <div class="card">
+            <div class="card-title">
+                <span class="icon purple">📁</span>
+                上传或粘贴 HTML
+            </div>
+            <div class="dropzone" id="dropzone">
+                <span class="dropzone-icon">📄</span>
+                <div class="dropzone-text">拖放 HTML 文件到这里，或点击选择</div>
+                <div class="dropzone-hint">支持 .html / .htm 文件，可多选</div>
+            </div>
+            <textarea id="htmlInput" placeholder="或者直接粘贴 HTML 代码..."></textarea>
+            <button class="btn btn-primary" id="addSlideBtn">➕ 添加为幻灯片</button>
+        </div>
+
+        <!-- Step 2: Settings & Export -->
+        <div class="card">
+            <div class="card-title">
+                <span class="icon green">🚀</span>
+                导出设置
+            </div>
+            <div class="settings-row">
+                <div class="form-group">
+                    <label>文件名</label>
+                    <input type="text" id="filename" value="presentation.pptx">
+                </div>
+                <div class="form-group">
+                    <label>根节点选择器（可选）</label>
+                    <input type="text" id="rootSelector" placeholder="如: #slide-container, .slide">
+                </div>
+                <button class="btn btn-success" id="exportBtn" disabled>📊 导出为 PPTX</button>
+            </div>
+            <div class="progress-bar" id="progressBar">
+                <div class="progress-fill" id="progressFill"></div>
+            </div>
+        </div>
+
+        <!-- Slide List -->
+        <div id="slideList"></div>
+
+        <!-- Status Toast -->
+        <div id="status" class="status-toast"></div>
+
+        <!-- Hidden export workspace -->
+        <div id="pptx-export-workspace"></div>
+    </div>
+
+    <script>
+        const slides = [];
+        const $ = id => document.getElementById(id);
+        let statusTimer = null;
+
+        // --- Agent Automation API ---
+        window.loadHtmlContent = (html, name) => {
+            const slideName = name || `Slide_${slides.length + 1}.html`;
+            slides.push({ name: slideName, content: html });
+            updateUI();
+            return slides.length;
+        };
+
+        window.batchLoadSlides = (slidesData) => {
+            slidesData.forEach(s => slides.push(s));
+            updateUI();
+            return slides.length;
+        };
+
+        window.triggerConversion = (filename) => {
+            if (filename) $('filename').value = filename;
+            if (slides.length === 0) {
+                showStatus('❌ 转换失败：暂无幻灯片', '#ef4444', true);
+                return false;
+            }
+            $('exportBtn').click();
+            return true;
+        };
+
+        window.getStatus = () => {
+            const statusEl = $('status');
+            return statusEl ? statusEl.innerText : '';
+        };
+
+        window.getLoadedCount = () => slides.length;
+
+        window.clearSlides = () => {
+            slides.length = 0;
+            updateUI();
+        };
+        // ----------------------------
+
+        // ============================
+        // #3 FIX: Proper drag & drop
+        // ============================
+        const dz = $('dropzone');
+
+        dz.addEventListener('click', () => {
+            const inp = document.createElement('input');
+            inp.type = 'file';
+            inp.multiple = true;
+            inp.accept = '.html,.htm'; // #10 FIX: limit file types
+            inp.onchange = e => handleFiles(e.target.files);
+            inp.click();
+        });
+
+        dz.addEventListener('dragover', e => {
+            e.preventDefault();
+            e.stopPropagation();
+            dz.classList.add('drag-over');
+        });
+
+        dz.addEventListener('dragleave', e => {
+            e.preventDefault();
+            e.stopPropagation();
+            dz.classList.remove('drag-over');
+        });
+
+        dz.addEventListener('drop', e => {
+            e.preventDefault();
+            e.stopPropagation();
+            dz.classList.remove('drag-over');
+            // Filter to only HTML files
+            const htmlFiles = Array.from(e.dataTransfer.files).filter(f =>
+                f.name.endsWith('.html') || f.name.endsWith('.htm')
+            );
+            if (htmlFiles.length === 0) {
+                showStatus('⚠️ 请拖放 .html 或 .htm 文件', '#f59e0b');
+                return;
+            }
+            handleFiles(htmlFiles);
+        });
+
+        // ============================
+        // File handling
+        // ============================
+        function handleFiles(files) {
+            let added = 0;
+            for (const f of files) {
+                const r = new FileReader();
+                r.onload = e => {
+                    slides.push({ name: f.name, content: e.target.result });
+                    added++;
+                    updateUI();
+                    if (added === files.length) {
+                        showStatus(`✅ 已添加 ${added} 个幻灯片`, '#10b981');
+                    }
+                };
+                r.readAsText(f);
+            }
+        }
+
+        $('addSlideBtn').onclick = () => {
+            const val = $('htmlInput').value.trim();
+            if (val) {
+                slides.push({ name: `手动输入_${slides.length + 1}.html`, content: val });
+                $('htmlInput').value = '';
+                updateUI();
+                showStatus('✅ 幻灯片已添加', '#10b981');
+            }
+        };
+
+        // ============================
+        // #8 FIX: Slide reordering
+        // ============================
+        window.moveSlide = function(index, direction) {
+            const newIndex = index + direction;
+            if (newIndex < 0 || newIndex >= slides.length) return;
+            [slides[index], slides[newIndex]] = [slides[newIndex], slides[index]];
+            updateUI();
+        };
+
+        window.removeSlide = function(index) {
+            slides.splice(index, 1);
+            updateUI();
+        };
+
+        function updateUI() {
+            const list = $('slideList');
+            if (slides.length === 0) {
+                list.innerHTML = '<div class="empty-state"><div class="empty-icon">📭</div>暂无幻灯片，请上传 HTML 文件</div>';
+                $('exportBtn').disabled = true;
+                return;
+            }
+
+            list.innerHTML = `
+                <div class="slide-list-header">幻灯片列表 (${slides.length})</div>
+                ${slides.map((s, i) => `
+                    <div class="slide-item">
+                        <div class="slide-info">
+                            <div class="slide-number">${i + 1}</div>
+                            <span class="slide-name" title="${s.name}">${s.name}</span>
+                        </div>
+                        <div class="slide-actions">
+                            <button class="btn btn-ghost" onclick="moveSlide(${i}, -1)" ${i === 0 ? 'disabled' : ''} title="上移">⬆</button>
+                            <button class="btn btn-ghost" onclick="moveSlide(${i}, 1)" ${i === slides.length - 1 ? 'disabled' : ''} title="下移">⬇</button>
+                            <button class="btn btn-danger" onclick="removeSlide(${i})" title="删除">✕</button>
+                        </div>
+                    </div>
+                `).join('')}
+            `;
+            $('exportBtn').disabled = false;
+        }
+
+        // ============================
+        // #12 FIX: Status toast with persistent errors
+        // ============================
+        function showStatus(msg, color = '#6366f1', isError = false) {
+            const s = $('status');
+            if (statusTimer) { clearTimeout(statusTimer); statusTimer = null; }
+
+            s.textContent = msg;
+            s.style.background = color;
+            s.style.display = 'block';
+            s.className = 'status-toast' + (isError ? ' is-error' : '');
+
+            if (isError) {
+                // Error stays until clicked
+                const hint = document.createElement('div');
+                hint.className = 'close-hint';
+                hint.textContent = '点击关闭';
+                s.appendChild(hint);
+                s.onclick = () => { s.style.display = 'none'; s.onclick = null; };
+            } else {
+                s.onclick = null;
+                statusTimer = setTimeout(() => { s.style.display = 'none'; }, 4000);
+            }
+        }
+
+        function setProgress(percent) {
+            const bar = $('progressBar');
+            const fill = $('progressFill');
+            bar.classList.toggle('active', percent >= 0);
+            fill.style.width = Math.min(100, Math.max(0, percent)) + '%';
+        }
+
+        // ============================
+        // OVERFLOW PRE-PROCESSING
+        // Instead of rasterizing entire overflow:hidden containers (which makes
+        // all text uneditable), we handle overflow at the app layer:
+        // 1. Find all containers with overflow:hidden
+        // 2. Find child elements that actually overflow the container
+        // 3. For decorative elements (no meaningful text): clip them to container bounds
+        // 4. For text elements: leave them alone (they'll just be slightly misplaced)
+        // This preserves text editability while handling visual clipping.
+        // ============================
+        function preProcessOverflowContainers(root) {
+            // Find all elements with overflow:hidden within the root
+            const allElements = root.querySelectorAll('*');
+            const overflowContainers = [];
+
+            allElements.forEach(el => {
+                const style = window.getComputedStyle(el);
+                const overflow = style.overflow + style.overflowX + style.overflowY;
+                if (overflow.includes('hidden') || overflow.includes('clip')) {
+                    overflowContainers.push(el);
+                }
+            });
+
+            for (const container of overflowContainers) {
+                const containerRect = container.getBoundingClientRect();
+
+                // Check each direct and nested child for overflow
+                const children = container.querySelectorAll('*');
+                for (const child of children) {
+                    const childRect = child.getBoundingClientRect();
+                    const childStyle = window.getComputedStyle(child);
+
+                    // Check if this child actually overflows the container
+                    const overflowsLeft   = childRect.left   < containerRect.left   - 0.5;
+                    const overflowsTop    = childRect.top    < containerRect.top    - 0.5;
+                    const overflowsRight  = childRect.right  > containerRect.right  + 0.5;
+                    const overflowsBottom = childRect.bottom > containerRect.bottom + 0.5;
+
+                    if (!overflowsLeft && !overflowsTop && !overflowsRight && !overflowsBottom) {
+                        continue; // Not overflowing, skip
+                    }
+
+                    // Determine if this is a "decorative" element (no meaningful text)
+                    const hasText = child.textContent.trim().length > 0;
+                    const isDecorative = !hasText && (
+                        childStyle.position === 'absolute' ||
+                        childStyle.position === 'fixed' ||
+                        childStyle.pointerEvents === 'none'
+                    );
+
+                    if (isDecorative) {
+                        // Strategy A: For purely decorative elements, clip to container bounds
+                        // We compute the intersection rectangle and resize the element
+                        const intersectLeft   = Math.max(childRect.left, containerRect.left);
+                        const intersectTop    = Math.max(childRect.top, containerRect.top);
+                        const intersectRight  = Math.min(childRect.right, containerRect.right);
+                        const intersectBottom = Math.min(childRect.bottom, containerRect.bottom);
+
+                        const newWidth  = intersectRight - intersectLeft;
+                        const newHeight = intersectBottom - intersectTop;
+
+                        if (newWidth <= 0 || newHeight <= 0) {
+                            // Completely outside container — hide it
+                            child.style.display = 'none';
+                        } else {
+                            // Clip: reposition and resize to the visible intersection
+                            const offsetLeft = intersectLeft - childRect.left;
+                            const offsetTop  = intersectTop  - childRect.top;
+
+                            child.style.width  = newWidth + 'px';
+                            child.style.height = newHeight + 'px';
+
+                            // Adjust position
+                            const currentLeft = parseFloat(childStyle.left) || 0;
+                            const currentTop  = parseFloat(childStyle.top)  || 0;
+                            const currentBottom = parseFloat(childStyle.bottom);
+                            const currentRight  = parseFloat(childStyle.right);
+
+                            if (!isNaN(currentBottom)) {
+                                // Element positioned with bottom — recalculate
+                                child.style.bottom = Math.max(0, currentBottom + offsetTop) + 'px';
+                            } else {
+                                child.style.top = (currentTop + offsetTop) + 'px';
+                            }
+
+                            if (!isNaN(currentRight)) {
+                                child.style.right = Math.max(0, currentRight + offsetLeft) + 'px';
+                            } else {
+                                child.style.left = (currentLeft + offsetLeft) + 'px';
+                            }
+
+                            // Ensure no border-radius creates further issues
+                            // Keep border-radius but ensure the clipped portion looks correct
+                        }
+                    }
+                    // Strategy B: For text-containing elements that overflow,
+                    // we leave them as-is. The slight overflow will be ignored by the library
+                    // since we're using overflowHandling: 'ignore'.
+                    // The tradeoff: some visual clipping may be lost, but text stays editable.
+                }
+            }
+        }
+
+        // ============================
+        // #1 FIX: Proper HTML parsing with DOMParser
+        // #2 FIX: Script safety with timeout + cleanup
+        // #4 FIX: Smarter body style handling
+        // #5 FIX: Configurable root selector
+        // #6 FIX: Respect original dimensions
+        // #7 FIX: Smarter render wait
+        // #9 FIX: Export progress feedback
+        // #11 FIX: Proper workspace cleanup
+        // ============================
+        $('exportBtn').onclick = async () => {
+            showStatus('⏳ 准备导出...', '#f59e0b');
+            $('exportBtn').disabled = true;
+            setProgress(0);
+
+            const workspace = $('pptx-export-workspace');
+            workspace.innerHTML = '';
+
+            // Track all injected elements for cleanup (#2, #11)
+            const injectedElements = [];
+            const elements = [];
+            const userRootSelector = $('rootSelector').value.trim();
+            const totalSlides = slides.length;
+
+            try {
+                for (let idx = 0; idx < totalSlides; idx++) {
+                    const s = slides[idx];
+                    const progress = ((idx) / totalSlides) * 80;
+                    setProgress(progress);
+                    showStatus(`⏳ 处理幻灯片 ${idx + 1}/${totalSlides}: ${s.name}`, '#f59e0b');
+
+                    const wrap = document.createElement('div');
+                    wrap.style.cssText = 'width: 1920px; min-height: 1080px; position: relative; overflow: hidden; background: white;';
+
+                    // ---- #1 FIX: Use DOMParser for full HTML documents ----
+                    const html = s.content;
+                    const isFullDocument = /^\s*<!DOCTYPE|^\s*<html/i.test(html);
+
+                    if (isFullDocument) {
+                        const parser = new DOMParser();
+                        const doc = parser.parseFromString(html, 'text/html');
+
+                        // Extract and inject <style> tags into current document
+                        // IMPORTANT: Scope/strip global rules (body, html, *) that would
+                        // corrupt the converter's own UI. Only class/id selectors are safe.
+                        doc.querySelectorAll('style').forEach(styleEl => {
+                            const clone = document.createElement('style');
+                            let css = styleEl.textContent;
+                            // Strip body{...}, html{...} and *{...} rules that would pollute the host page
+                            css = css.replace(/\bbody\s*\{[^}]*\}/gi, '');
+                            css = css.replace(/\bhtml\s*\{[^}]*\}/gi, '');
+                            css = css.replace(/\*\s*\{[^}]*\}/g, '');
+                            clone.textContent = css;
+                            document.head.appendChild(clone);
+                            injectedElements.push(clone);
+                        });
+
+                        // Extract and inject <link rel="stylesheet"> tags
+                        doc.querySelectorAll('link[rel="stylesheet"]').forEach(linkEl => {
+                            const clone = document.createElement('link');
+                            clone.rel = 'stylesheet';
+                            clone.href = linkEl.href;
+                            if (linkEl.crossOrigin) clone.crossOrigin = linkEl.crossOrigin;
+                            document.head.appendChild(clone);
+                            injectedElements.push(clone);
+                        });
+
+                        // ---- HEAD SCRIPT FIX: Extract <script> from <head> ----
+                        // Libraries like Chart.js / ECharts are loaded in <head>.
+                        // They must be injected BEFORE body scripts that depend on them.
+                        const headScripts = doc.querySelectorAll('head script');
+                        for (const sc of headScripts) {
+                            const newSc = document.createElement('script');
+                            if (sc.src) {
+                                newSc.src = sc.src;
+                                document.head.appendChild(newSc);
+                                injectedElements.push(newSc);
+                                await Promise.race([
+                                    new Promise((resolve) => {
+                                        newSc.onload = resolve;
+                                        newSc.onerror = () => {
+                                            console.warn(`[PPTX Factory] Head 脚本加载失败: ${sc.src}`);
+                                            resolve();
+                                        };
+                                    }),
+                                    new Promise(resolve => setTimeout(resolve, 8000))
+                                ]);
+                            } else if (sc.textContent.trim()) {
+                                newSc.text = sc.textContent;
+                                document.head.appendChild(newSc);
+                                injectedElements.push(newSc);
+                            }
+                        }
+
+                        // #4 FIX: Extract body content, preserving necessary body styles
+                        // Only strip positioning/centering that would offset layout
+                        const bodyEl = doc.body;
+                        if (bodyEl) {
+                            // Copy body's class so class-based styles work
+                            if (bodyEl.className) {
+                                wrap.className = bodyEl.className;
+                            }
+                            wrap.innerHTML = bodyEl.innerHTML;
+                        }
+                    } else {
+                        // Fragment mode — inject directly
+                        wrap.innerHTML = html;
+                    }
+
+                    workspace.appendChild(wrap);
+
+                    // ---- #2 FIX: Script execution with timeout + tracking ----
+                    const scripts = wrap.querySelectorAll('script');
+                    for (let sc of scripts) {
+                        const newSc = document.createElement('script');
+                        if (sc.src) {
+                            newSc.src = sc.src;
+                            // CRITICAL: appendChild MUST happen inside the Promise
+                            // so the browser starts loading the script before we await
+                            document.head.appendChild(newSc);
+                            injectedElements.push(newSc);
+                            // Timeout after 8 seconds to prevent hanging
+                            await Promise.race([
+                                new Promise((resolve) => {
+                                    newSc.onload = resolve;
+                                    newSc.onerror = () => {
+                                        console.warn(`[PPTX Factory] 脚本加载失败: ${sc.src}`);
+                                        resolve();
+                                    };
+                                }),
+                                new Promise(resolve => setTimeout(resolve, 8000))
+                            ]);
+                        } else {
+                            newSc.text = sc.text;
+                            document.head.appendChild(newSc);
+                            injectedElements.push(newSc);
+                        }
+                    }
+
+                    // ---- #7 FIX: Smart render wait ----
+                    const hasExternalScripts = wrap.querySelectorAll('script[src]').length > 0;
+                    const hasCanvas = wrap.querySelectorAll('canvas').length > 0;
+                    const delay = (hasExternalScripts || hasCanvas) ? 2000 : 300;
+                    await new Promise(r => setTimeout(r, delay));
+
+                    // ---- #5 FIX: Configurable root selector ----
+                    let root = null;
+                    if (userRootSelector) {
+                        root = wrap.querySelector(userRootSelector);
+                        if (!root) {
+                            console.warn(`[PPTX Factory] 选择器 "${userRootSelector}" 未找到，使用自动检测`);
+                        }
+                    }
+                    if (!root) {
+                        // Auto-detect: try common selectors, then fallback
+                        root = wrap.querySelector('#slide-container')
+                            || wrap.querySelector('.slide')
+                            || wrap.querySelector('[data-slide]')
+                            || null;
+                    }
+                    if (!root) {
+                        // Fallback: find the first meaningful child (skip <style>, <script>, <link>)
+                        const meaningfulTags = new Set(['STYLE', 'SCRIPT', 'LINK', 'META', 'TITLE']);
+                        for (const child of wrap.children) {
+                            if (!meaningfulTags.has(child.tagName)) {
+                                root = child;
+                                break;
+                            }
+                        }
+                    }
+                    if (!root) root = wrap;
+
+                    // ---- #6 FIX: Respect original dimensions ----
+                    const rootCS = window.getComputedStyle(root);
+                    const originalWidth = root.offsetWidth || parseFloat(rootCS.width) || 0;
+                    const originalHeight = root.offsetHeight || parseFloat(rootCS.height) || 0;
+
+                    root.style.position = 'absolute';
+                    root.style.top = '0';
+                    root.style.left = '0';
+                    root.style.margin = '0';
+
+                    if (originalWidth < 100 || originalHeight < 100) {
+                        root.style.width = '1920px';
+                        root.style.height = '1080px';
+                    }
+
+                    // ---- OVERFLOW PRE-PROCESSING ----
+                    // Before export, handle overflow:hidden containers smartly:
+                    // Instead of rasterizing the entire container (which loses text editability),
+                    // we clip or remove purely decorative elements that overflow.
+                    // This avoids triggering the library's rasterize-all behavior.
+                    preProcessOverflowContainers(root);
+
+                    elements.push(root);
+                }
+
+                // Wait for stylesheets to load
+                await new Promise(r => setTimeout(r, 500));
+
+                setProgress(85);
+                showStatus(`⏳ 正在生成 PPTX 文件...`, '#f59e0b');
+
+                await domToPptx.exportToPptx(elements, {
+                    fileName: $('filename').value || 'presentation.pptx',
+                    autoEmbedFonts: true,
+                    overflowHandling: 'ignore',      // We handle overflow in pre-processing
+                    exportCanvas: true,              // Explicit declaration
+                    canvasCorsPolicy: 'placeholder'  // Explicit declaration
+                });
+
+                setProgress(100);
+                showStatus('✅ 高保真导出成功！', '#10b981');
+
+            } catch (err) {
+                console.error('[PPTX Factory] Export error:', err);
+                showStatus('❌ 导出失败: ' + err.message, '#ef4444', true);
+            } finally {
+                // ---- #11 FIX: Clean up all injected elements ----
+                injectedElements.forEach(el => {
+                    try { el.remove(); } catch(e) {}
+                });
+                injectedElements.length = 0;
+
+                $('exportBtn').disabled = slides.length === 0;
+                setTimeout(() => setProgress(-1), 2000);
+            }
+        };
+
+        // Initial state
+        updateUI();
+    </script>
+</body>
+</html>
